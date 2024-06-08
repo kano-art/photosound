@@ -1,0 +1,72 @@
+import javax.sound.sampled.*;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import javax.imageio.ImageIO;
+
+public class ImageToSound {
+
+    public static void main(String[] args) {
+        // 変換する画像ファイルのパスを指定
+        String imagePath = "input_image.jpg";
+
+        try {
+            // 画像を読み込む
+            BufferedImage image = ImageIO.read(new File(imagePath));
+
+            // 画像の幅と高さを取得
+            int width = image.getWidth();
+            int height = image.getHeight();
+
+            // 音声のサンプルレートやバッファサイズを設定
+            float sampleRate = 44100; // 44.1kHz
+            int bufferSize = 1024;
+
+            // オーディオフォーマットを作成
+            AudioFormat format = new AudioFormat(sampleRate, 16, 1, true, true);
+
+            // オーディオラインをオープン
+            SourceDataLine line = AudioSystem.getSourceDataLine(format);
+            line.open(format, bufferSize);
+            line.start();
+
+            // 画像の各ピクセルの明るさを解析して音を生成
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    Color color = new Color(image.getRGB(x, y));
+                    int brightness = (color.getRed() + color.getGreen() + color.getBlue()) / 3; // グレースケールに変換
+                    float frequency = map(brightness, 0, 255, 100, 1000); // 明るさを周波数にマッピング
+
+                    // サイン波を生成して再生
+                    playSineWave(line, frequency, 100);
+                }
+            }
+
+            // オーディオラインをクローズ
+            line.drain();
+            line.stop();
+            line.close();
+        } catch (IOException | LineUnavailableException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // 値の範囲を別の範囲にマッピングするユーティリティ関数
+    private static float map(float value, float start1, float stop1, float start2, float stop2) {
+        return start2 + (stop2 - start2) * ((value - start1) / (stop1 - start1));
+    }
+
+    // サイン波を生成して再生する関数
+    private static void playSineWave(SourceDataLine line, float frequency, int durationMillis) {
+        byte[] buffer = new byte[line.getBufferSize() / 5];
+        double period = (double) line.getFormat().getSampleRate() / frequency;
+        for (int i = 0; i < durationMillis * line.getFormat().getSampleRate() / 1000; i++) {
+            double angle = 2.0 * Math.PI * i / period;
+            short sample = (short) (Short.MAX_VALUE * Math.sin(angle));
+            buffer[0] = (byte) (sample & 0xFF);
+            buffer[1] = (byte) ((sample >> 8) & 0xFF);
+            line.write(buffer, 0, 2);
+        }
+    }
+}
